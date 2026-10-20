@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Attic – add a document</title>
+<style>
+  :root { --bg:#faf8f4; --fg:#1d1b18; --card:#fff; --line:#ddd6ca; --accent:#8a4b2a; --muted:#6b645a; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#17150f; --fg:#f1ede4; --card:#221f17; --line:#3a352a; --accent:#e0a275; --muted:#a39b8d; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--fg);
+         font:16px/1.45 system-ui, sans-serif; max-width:520px; margin-inline:auto; }
+  h1 { font-size:1.3rem; margin:.2em 0 .1em; } p.sub { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin:12px 0; }
+  label { display:block; font-size:.85rem; color:var(--muted); margin:10px 0 3px; }
+  input, select, textarea, button { width:100%; font:inherit; color:inherit; background:transparent;
+         border:1px solid var(--line); border-radius:8px; padding:10px; }
+  button { background:var(--accent); color:#fff; border:0; margin-top:12px; font-weight:600; }
+  button:disabled { opacity:.5; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  #msg { min-height:1.4em; font-size:.9rem; } .low { border-color:#c0392b; }
+</style>
+</head>
+<body>
+<h1>Attic</h1>
+<p class="sub">Photograph a receipt, warranty card or notice. You confirm the details before anything is saved.</p>
+
+<div class="card">
+  <label for="token">Access token</label>
+  <input id="token" type="password" autocomplete="off" placeholder="ATTIC_TOKEN">
+  <label for="file">Photo or .txt</label>
+  <input id="file" type="file" accept="image/*,.txt" capture="environment">
+  <button id="go">Read document</button>
+  <div id="msg" role="status"></div>
+</div>
+
+<form id="review" class="card" hidden>
+  <strong>Check the details</strong>
+  <label for="f_title">Title</label><input id="f_title">
+  <div class="row">
+    <div><label for="f_doc_type">Type</label>
+      <select id="f_doc_type"><option>receipt</option><option>warranty</option><option>manual</option>
+      <option>insurance</option><option>prescription</option><option>notice</option><option>other</option></select></div>
+    <div><label for="f_vendor">Store / vendor</label><input id="f_vendor"></div>
+  </div>
+  <label for="f_product">Product</label><input id="f_product">
+  <div class="row">
+    <div><label for="f_model_no">Model no.</label><input id="f_model_no"></div>
+    <div><label for="f_serial_no">Serial no.</label><input id="f_serial_no"></div>
+  </div>
+  <div class="row">
+    <div><label for="f_purchase_date">Purchase date</label><input id="f_purchase_date" type="date"></div>
+    <div><label for="f_warranty_months">Warranty (months)</label><input id="f_warranty_months" type="number" min="0" max="240"></div>
+  </div>
+  <div class="row">
+    <div><label for="f_amount">Amount</label><input id="f_amount" type="number" step="0.01"></div>
+    <div><label for="f_currency">Currency</label><input id="f_currency" maxlength="3"></div>
+  </div>
+  <button type="submit" id="save">Save to Attic</button>
+</form>
+
+<script>
+const $ = id => document.getElementById(id);
+const KEYS = ["title","doc_type","vendor","product","model_no","serial_no","purchase_date","warranty_months","amount","currency"];
+let draftId = null;
+$("token").value = sessionStorage.getItem("attic_token") || "";
+
+async function api(path, opts) {
+  const token = $("token").value.trim();
+  sessionStorage.setItem("attic_token", token);
+  const res = await fetch(path, { ...opts, headers: { ...(opts.headers||{}), Authorization: "Bearer " + token } });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || ("HTTP " + res.status));
+  return body;
+}
+
+$("go").onclick = async () => {
+  const f = $("file").files[0];
+  if (!f) { $("msg").textContent = "Pick a photo first."; return; }
+  $("go").disabled = true; $("msg").textContent = "Reading…";
+  try {
+    const fd = new FormData(); fd.append("file", f);
+    const r = await api("/api/ingest", { method: "POST", body: fd });
+    draftId = r.draft_id;
+    KEYS.forEach(k => { $("f_" + k).value = r.fields[k] ?? ""; });
+    $("review").hidden = false;
+    $("msg").textContent = "Confidence " + Math.round(r.confidence * 100) + "%" +
+      (r.used_cloud ? " (cloud-assisted, redacted)" : " (processed on this device)");
+    $("review").classList.toggle("low", r.confidence < 0.7);
+  } catch (e) { $("msg").textContent = "Error: " + e.message; }
+  $("go").disabled = false;
+};
+
+$("review").onsubmit = async ev => {
+  ev.preventDefault();
+  const fields = {};
+  KEYS.forEach(k => { const v = $("f_" + k).value; if (v !== "") fields[k] = v; });
+  try {
+    const r = await api("/api/confirm", { method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ draft_id: draftId, fields }) });
+    $("msg").textContent = "Saved as document #" + r.id + ".";
+    $("review").hidden = true; $("file").value = "";
+  } catch (e) { $("msg").textContent = "Error: " + e.message; }
+};
+</script>
+</body>
+</html>

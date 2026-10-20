@@ -1,0 +1,21 @@
+[project]
+name = "attic-mcp"
+version = "0.1.0"
+description = "Private household-document memory for Alexa+, as a self-hosted MCP server"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = ["mcp>=2.3,<3", "starlette", "uvicorn", "python-multipart", "dateparser"]
+
+[project.optional-dependencies]
+ocr = ["pytesseract", "opencv-python-headless", "pillow"]
+cloud = ["boto3"]
+dev = ["pytest", "httpx"]
+
+[tool.setuptools.packages.find]
+include = ["attic*"]
+
+[tool.setuptools.package-data]
+attic = ["static/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

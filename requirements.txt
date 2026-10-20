@@ -1,0 +1,13 @@
+mcp>=2.3,<3
+starlette
+uvicorn
+python-multipart
+dateparser
+# optional: local OCR (needs the tesseract binary: apt install tesseract-ocr)
+pytesseract
+opencv-python-headless
+# optional: Bedrock extraction tier
+boto3
+# dev
+pytest
+httpx
